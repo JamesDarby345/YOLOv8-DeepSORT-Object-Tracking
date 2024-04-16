@@ -415,7 +415,7 @@ class AutoShape(nn.Module):
             if isinstance(size, int):  # expand
                 size = (size, size)
             p = next(self.model.parameters()) if self.pt else torch.empty(1, device=self.model.device)  # param
-            autocast = self.amp and (p.device.type != 'cpu')  # Automatic Mixed Precision (AMP) inference
+            autocast = self.amp and (p.device.type != 'cpu' or p.device.type != 'mps')  # Automatic Mixed Precision (AMP) inference
             if isinstance(ims, torch.Tensor):  # torch
                 with amp.autocast(autocast):
                     return self.model(ims.to(p.device).type_as(p), augment=augment)  # inference

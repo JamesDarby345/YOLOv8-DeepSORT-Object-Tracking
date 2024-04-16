@@ -25,6 +25,14 @@ data_deque = {}
 
 deepsort = None
 
+object_counter = {}
+object_ids = {}
+
+object_counter1 = {}
+
+#2562 x 1440 videos(0, 1180), (2562, 1180),
+line = [(0, 1180), (2562, 1180), (180,0), (180, 1440), (2382, 0), (2382, 1440)] #mcgill videoCHANGE to match video dimension
+line = [(0, 1400), (2562, 1400), (250,0), (250, 1440), (2312, 0), (2312, 1440)] #st cath videoCHANGE to match video dimension
 def init_tracker():
     global deepsort
     cfg_deep = get_config()
@@ -121,9 +129,37 @@ def UI_box(x, img, color=None, label=None, line_thickness=None):
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
+def intersect(A,B,C,D):
+    return ccw(A,C,D) != ccw(B,C,D) and ccw(A,B,C) != ccw(A,B,D)
 
+def ccw(A,B,C):
+    return (C[1]-A[1]) * (B[0]-A[0]) > (B[1]-A[1]) * (C[0]-A[0])
+
+
+def get_direction(point1, point2):
+    direction_str = ""
+
+    # calculate y axis direction
+    if point1[1] > point2[1]:
+        direction_str += "South"
+    elif point1[1] < point2[1]:
+        direction_str += "North"
+    else:
+        direction_str += ""
+
+    # calculate x axis direction
+    if point1[0] > point2[0]:
+        direction_str += "East"
+    elif point1[0] < point2[0]:
+        direction_str += "West"
+    else:
+        direction_str += ""
+
+    return direction_str
 def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
-    #cv2.line(img, line[0], line[1], (46,162,112), 3)
+    cv2.line(img, line[0], line[1], (46,162,112), 3)
+    cv2.line(img, line[2], line[3], (46,162,112), 3)
+    cv2.line(img, line[4], line[5], (46,162,112), 3)
 
     height, width, _ = img.shape
     # remove tracked point from buffer if object is lost
@@ -138,8 +174,21 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
         y1 += offset[1]
         y2 += offset[1]
 
-        # code to find center of bottom edge
-        center = (int((x2+x1)/ 2), int((y2+y2)/2))
+        image_x_center = 2562/2
+
+        # code to find center of edges
+        center_bottom = (int((x2+x1)/ 2), int((y2+y2)/2))
+        bottom_left = (int(x1), int((y2+y2)/2))
+        bottom_right = (int(x2), int((y2+y2)/2))
+        center_left = (int((x1+x1)/2), int((y2+y1)/2))
+        center_right = (int((x2+x2)/2), int((y2+y1)/2))
+
+        if center_bottom[0] < image_x_center:
+            tracking_point = bottom_left
+            tracking_side = center_left
+        else:
+            tracking_point = bottom_right
+            tracking_side = center_right
 
         # get ID of object
         id = int(identities[i]) if identities is not None else 0
@@ -152,7 +201,37 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
         label = '{}{:d}'.format("", id) + ":"+ '%s' % (obj_name)
 
         # add center to buffer
-        data_deque[id].appendleft(center)
+        data_deque[id].appendleft(tracking_point)
+        # data_deque[id].appendleft(center_bottom)
+        # data_deque[id].appendleft(tracking_side)
+        if len(data_deque[id]) >= 2:
+          direction = get_direction(data_deque[id][0], data_deque[id][1])
+          if intersect(data_deque[id][0], data_deque[id][1], line[0], line[1]) or intersect(data_deque[id][0], data_deque[id][1], line[2], line[3]) or intersect(data_deque[id][0], data_deque[id][1], line[4], line[5]):
+              cv2.line(img, line[0], line[1], (255, 255, 255), 3)
+              print("Line crossed by object: ", id)
+              print(obj_name)
+              #only track person, car and truck, ignore other objects
+              if obj_name not in ["car", "truck", "person"]:
+                print(obj_name, "Object not counted, not car, person, or truck")
+                continue
+              if obj_name in ["car", "truck"] and (intersect(data_deque[id][0], data_deque[id][1], line[2], line[3]) or intersect(data_deque[id][0], data_deque[id][1], line[4], line[5])):
+                  obj_name = obj_name + "_parked"
+              # Change made to ignore multiple count of same object 
+              # (can happen as cars  move towards the side of the frame and the line is crossed multiple times)
+              if id not in object_ids:
+                    object_ids[id] = True
+              else:
+                    continue
+            #   if "South" in direction:
+              if obj_name not in object_counter:
+                    object_counter[obj_name] = 1
+              else:
+                    object_counter[obj_name] += 1
+            #   if "North" in direction:
+            #     if obj_name not in object_counter1:
+            #         object_counter1[obj_name] = 1
+            #     else:
+            #         object_counter1[obj_name] += 1
         UI_box(box, img, label=label, color=color, line_thickness=2)
         # draw trail
         for i in range(1, len(data_deque[id])):
@@ -163,6 +242,24 @@ def draw_boxes(img, bbox, names,object_id, identities=None, offset=(0, 0)):
             thickness = int(np.sqrt(64 / float(i + i)) * 1.5)
             # draw trails
             cv2.line(img, data_deque[id][i - 1], data_deque[id][i], color, thickness)
+    
+    #4. Display Count in top right corner
+        for idx, (key, value) in enumerate(object_counter1.items()):
+            cnt_str = str(key) + ":" +str(value)
+            cv2.line(img, (width - 500,25), (width,25), [85,45,255], 40)
+            cv2.putText(img, f'Number of Vehicles Entering', (width - 500, 35), 0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+            cv2.line(img, (width - 150, 65 + (idx*40)), (width, 65 + (idx*40)), [85, 45, 255], 30)
+            cv2.putText(img, cnt_str, (width - 150, 75 + (idx*40)), 0, 1, [255, 255, 255], thickness = 2, lineType = cv2.LINE_AA)
+
+        for idx, (key, value) in enumerate(object_counter.items()):
+            cnt_str1 = str(key) + ":" +str(value)
+            cv2.line(img, (20,25), (500,25), [85,45,255], 40)
+            cv2.putText(img, f'Numbers of Vehicles Passed', (11, 35), 0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)    
+            cv2.line(img, (20,65+ (idx*40)), (127,65+ (idx*40)), [85,45,255], 30)
+            cv2.putText(img, cnt_str1, (11, 75+ (idx*40)), 0, 1, [225, 255, 255], thickness=2, lineType=cv2.LINE_AA)
+    
+    
+    
     return img
 
 

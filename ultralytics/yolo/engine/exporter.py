@@ -154,7 +154,7 @@ class Exporter:
         # Load PyTorch model
         self.device = select_device('cpu' if self.args.device is None else self.args.device)
         if self.args.half:
-            if self.device.type == 'cpu' and not coreml:
+            if self.device.type == 'cpu' or self.device.type == 'mps' and not coreml:
                 LOGGER.info('half=True only compatible with GPU or CoreML export, i.e. use device=0 or format=coreml')
                 self.args.half = False
             assert not self.args.dynamic, '--half not compatible with --dynamic, i.e. use either --half or --dynamic'
